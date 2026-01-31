@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Slideshow - January 31, 2026</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f7;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .slideshow-container {
+            position: relative;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .slide {
+            display: none;
+            position: relative;
+            height: 500px;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .slide.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .slide-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 50%, transparent 100%);
+            padding: 60px 40px 30px;
+            color: white;
+        }
+
+        .slide-category {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .category-badge {
+            background-color: #e50914;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .slide-source {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .slide-title {
+            font-size: 2.5em;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 10px;
+        }
+
+        .slide-description {
+            font-size: 1.1em;
+            opacity: 0.95;
+            line-height: 1.5;
+            max-width: 800px;
+        }
+
+        .slide-counter {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: rgba(255,255,255,0.9);
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            z-index: 10;
+        }
+
+        .nav-button:hover {
+            background-color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .nav-button.prev {
+            left: 20px;
+        }
+
+        .nav-button.next {
+            right: 20px;
+        }
+
+        .pause-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0,0,0,0.6);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s;
+            z-index: 10;
+        }
+
+        .pause-button:hover {
+            background-color: rgba(0,0,0,0.8);
+        }
+
+        .dots-container {
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .dot {
+            height: 12px;
+            width: 12px;
+            margin: 0 6px;
+            background-color: #ddd;
+            border-radius: 50%;
+            display: inline-block;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .dot.active {
+            background-color: #667eea;
+            width: 30px;
+            border-radius: 6px;
+        }
+
+        .news-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .news-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .news-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .news-card-image {
+            width: 100%;
+            height: 200px;
+            background-size: cover;
+            background-position: center;
+        }
+
+        .news-card-content {
+            padding: 20px;
+        }
+
+        .news-card-category {
+            color: #667eea;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .news-card-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+            line-height: 1.4;
+        }
+
+        .news-card-source {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .slide {
+                height: 400px;
+            }
+
+            .slide-title {
+                font-size: 1.8em;
+            }
+
+            .slide-description {
+                font-size: 1em;
+            }
+
+            .nav-button {
+                width: 40px;
+                height: 40px;
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📰 News Today</h1>
+        <p>Generated on January 31, 2026 at 05:41 PM</p>
+    </div>
+
+    <div class="container">
+        <div class="slideshow-container">
+            <button class="pause-button" id="pauseBtn">⏸ Pause</button>
+            
+            
+            <div class="slide active" style="background-image: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=1200&h=500&fit=crop');">
+                <div class="slide-counter">
+                    <span class="current-slide">1</span> of <span id="totalSlides">5</span>
+                </div>
+                <div class="slide-overlay">
+                    <div class="slide-category">
+                        <span class="category-badge">Breaking News</span>
+                        <span class="slide-source">CBS News</span>
+                    </div>
+                    <h2 class="slide-title">Partial Government Shutdown Begins as Funding Lapses</h2>
+                    <p class="slide-description">Senate passed spending bills late Friday, but funding for dozens of federal agencies has still lapsed, triggering a partial shutdown.</p>
+                </div>
+            </div>
+
+            <div class="slide " style="background-image: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1589578228447-e1a4e481c6c8?w=1200&h=500&fit=crop');">
+                <div class="slide-counter">
+                    <span class="current-slide">2</span> of <span id="totalSlides">5</span>
+                </div>
+                <div class="slide-overlay">
+                    <div class="slide-category">
+                        <span class="category-badge">Breaking News</span>
+                        <span class="slide-source">New York Times</span>
+                    </div>
+                    <h2 class="slide-title">Federal Judge Denies Request to Block ICE Surge in Minnesota</h2>
+                    <p class="slide-description">Minnesota officials sought temporary halt to deployment of 3,000 federal agents, claiming state sovereignty violations.</p>
+                </div>
+            </div>
+
+            <div class="slide " style="background-image: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=1200&h=500&fit=crop');">
+                <div class="slide-counter">
+                    <span class="current-slide">3</span> of <span id="totalSlides">5</span>
+                </div>
+                <div class="slide-overlay">
+                    <div class="slide-category">
+                        <span class="category-badge">Breaking News</span>
+                        <span class="slide-source">The Guardian</span>
+                    </div>
+                    <h2 class="slide-title">Djokovic Shocks Sinner in Late-Night Australian Open Thriller</h2>
+                    <p class="slide-description">Serbian star defeats world No. 2 in five-set battle, keeping his dream of a record 25th Grand Slam title alive.</p>
+                </div>
+            </div>
+
+            <div class="slide " style="background-image: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=1200&h=500&fit=crop');">
+                <div class="slide-counter">
+                    <span class="current-slide">4</span> of <span id="totalSlides">5</span>
+                </div>
+                <div class="slide-overlay">
+                    <div class="slide-category">
+                        <span class="category-badge">Breaking News</span>
+                        <span class="slide-source">New York Times</span>
+                    </div>
+                    <h2 class="slide-title">Catherine O'Hara, 'Home Alone' Star, Dies at 71</h2>
+                    <p class="slide-description">Emmy-winning actress known for roles in 'Home Alone' and 'Schitt's Creek' passes away, leaving behind a legendary comedy career.</p>
+                </div>
+            </div>
+
+            <div class="slide " style="background-image: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=1200&h=500&fit=crop');">
+                <div class="slide-counter">
+                    <span class="current-slide">5</span> of <span id="totalSlides">5</span>
+                </div>
+                <div class="slide-overlay">
+                    <div class="slide-category">
+                        <span class="category-badge">Breaking News</span>
+                        <span class="slide-source">Fox News</span>
+                    </div>
+                    <h2 class="slide-title">Lindsey Vonn Airlifted After Crash, Olympic Comeback in Jeopardy</h2>
+                    <p class="slide-description">U.S. skiing legend suffers knee injury in Switzerland crash, but vows to return for Milan Cortina Games next week.</p>
+                </div>
+            </div>
+
+
+            <button class="nav-button prev" onclick="changeSlide(-1)">‹</button>
+            <button class="nav-button next" onclick="changeSlide(1)">›</button>
+
+            <div class="dots-container">
+                <span class="dot active" onclick="goToSlide(0)"></span>
+<span class="dot " onclick="goToSlide(1)"></span>
+<span class="dot " onclick="goToSlide(2)"></span>
+<span class="dot " onclick="goToSlide(3)"></span>
+<span class="dot " onclick="goToSlide(4)"></span>
+
+            </div>
+        </div>
+
+        <div class="news-grid">
+            
+            <div class="news-card">
+                <div class="news-card-image" style="background-image: url('https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=400&h=200&fit=crop');"></div>
+                <div class="news-card-content">
+                    <div class="news-card-category">News</div>
+                    <h3 class="news-card-title">Judge Orders Release of 5-Year-Old Detained by ICE in Minnesota</h3>
+                    <p class="news-card-source">New York Times • 18 hours ago</p>
+                </div>
+            </div>
+
+            <div class="news-card">
+                <div class="news-card-image" style="background-image: url('https://images.unsplash.com/photo-1484788984921-03950022c9ef?w=400&h=200&fit=crop');"></div>
+                <div class="news-card-content">
+                    <div class="news-card-category">News</div>
+                    <h3 class="news-card-title">Google Takes Down Invisible Network Using Your Phone's Internet</h3>
+                    <p class="news-card-source">Android Central • 1 days ago</p>
+                </div>
+            </div>
+
+            <div class="news-card">
+                <div class="news-card-image" style="background-image: url('https://images.unsplash.com/photo-1589391886645-d51941baf7fb?w=400&h=200&fit=crop');"></div>
+                <div class="news-card-content">
+                    <div class="news-card-category">News</div>
+                    <h3 class="news-card-title">Judge Drops Death Penalty Charge Against Luigi Mangione</h3>
+                    <p class="news-card-source">New York Times • 1 days ago</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Generated by Python News Slideshow • Data refreshed: 05:41 PM</p>
+    </div>
+
+    <script>
+        let currentSlideIndex = 0;
+        let autoPlayInterval;
+        let isPaused = false;
+
+        const slides = document.querySelectorAll('.slide');
+        const dots = document.querySelectorAll('.dot');
+        const pauseBtn = document.getElementById('pauseBtn');
+
+        function showSlide(index) {
+            if (index >= slides.length) {
+                currentSlideIndex = 0;
+            } else if (index < 0) {
+                currentSlideIndex = slides.length - 1;
+            } else {
+                currentSlideIndex = index;
+            }
+
+            slides.forEach(slide => slide.classList.remove('active'));
+            dots.forEach(dot => dot.classList.remove('active'));
+
+            slides[currentSlideIndex].classList.add('active');
+            dots[currentSlideIndex].classList.add('active');
+
+            updateSlideCounter();
+        }
+
+        function updateSlideCounter() {
+            const counters = document.querySelectorAll('.current-slide');
+            counters.forEach(counter => {
+                counter.textContent = currentSlideIndex + 1;
+            });
+        }
+
+        function changeSlide(direction) {
+            showSlide(currentSlideIndex + direction);
+            resetAutoPlay();
+        }
+
+        function goToSlide(index) {
+            showSlide(index);
+            resetAutoPlay();
+        }
+
+        function autoPlay() {
+            if (!isPaused) {
+                currentSlideIndex++;
+                showSlide(currentSlideIndex);
+            }
+        }
+
+        function resetAutoPlay() {
+            clearInterval(autoPlayInterval);
+            if (!isPaused) {
+                autoPlayInterval = setInterval(autoPlay, 5000);
+            }
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                clearInterval(autoPlayInterval);
+                pauseBtn.innerHTML = '▶ Play';
+            } else {
+                autoPlayInterval = setInterval(autoPlay, 5000);
+                pauseBtn.innerHTML = '⏸ Pause';
+            }
+        }
+
+        pauseBtn.addEventListener('click', togglePause);
+
+        // Start auto-play
+        autoPlayInterval = setInterval(autoPlay, 5000);
+
+        // Pause on hover
+        document.querySelector('.slideshow-container').addEventListener('mouseenter', () => {
+            if (!isPaused) {
+                clearInterval(autoPlayInterval);
+            }
+        });
+
+        document.querySelector('.slideshow-container').addEventListener('mouseleave', () => {
+            if (!isPaused) {
+                autoPlayInterval = setInterval(autoPlay, 5000);
+            }
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                changeSlide(-1);
+            } else if (e.key === 'ArrowRight') {
+                changeSlide(1);
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                togglePause();
+            }
+        });
+    </script>
+</body>
+</html>
