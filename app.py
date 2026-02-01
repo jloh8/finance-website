@@ -2,146 +2,157 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from google import genai
 from google.genai import types
 from google.api_core import exceptions
 import time
 from datetime import datetime, timedelta
 
-# --- CONFIGURATION ---
-GEMINI_API_KEY = "AIzaSyB2yqLAFCq-cZIgPgY0Ewfg9__YX0mu_WY" # 🔑 Replace with your actual key
+# --- 1. CONFIGURATION ---
+GEMINI_API_KEY = "YOUR_API_KEY_HERE" # 🔑 Replace with your actual key
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-st.set_page_config(page_title="Gemini Volatility Analyst", layout="wide", page_icon="📈")
-
-# --- CUSTOM CSS ---
+# --- 2. THEME & CSS ---
+st.set_page_config(page_title="AI Pro Dashboard", layout="wide")
 st.markdown("""
 <style>
-    .report-card { background: #f9f9f9; padding: 20px; border-radius: 12px; border-left: 6px solid #4285F4; margin: 15px 0; }
-    .move-pos { color: #0f9d58; font-weight: bold; }
-    .move-neg { color: #d93025; font-weight: bold; }
+    .stApp { background-color: #1c1c1e; }
+    [data-testid="stSidebar"] { background-color: #2c2c2e; border-right: 1px solid #3a3a3c; }
+    .report-card { 
+        background: #2c2c2e; padding: 20px; border-radius: 12px; 
+        border-left: 6px solid #00D9FF; margin: 15px 0; color: white;
+    }
+    .info-box {
+        background: #2c2c2e; padding: 15px; border-radius: 8px;
+        border: 1px solid #48484a; margin: 5px 0;
+    }
+    .metric-label { color: #8e8e93; font-size: 12px; text-transform: uppercase; font-weight: 600; }
+    .metric-value { color: #ffffff; font-size: 20px; font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- AI ANALYSIS FUNCTION WITH RETRY LOGIC ---
-def analyze_move_with_retry(ticker, date_obj, pct_change, max_retries=3):
-    """
-    Calls Gemini with Google Search grounding. 
-    Implements exponential backoff for 429 Rate Limit errors.
-    """
-    date_str = date_obj.strftime('%B %d, %Y')
-    prompt = (f"Search Google News and financial reports for {ticker} on {date_str}. "
-              f"The stock moved {pct_change:.2f}% on this day. "
-              f"Explain the primary news catalysts or macro reasons for this move.")
-
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    tools=[types.Tool(google_search=types.GoogleSearch())]
-                )
-            )
-            return response.text
-        
-        except exceptions.ResourceExhausted:
-            wait_time = (2 ** attempt) * 10  # Wait 10s, 20s, 40s...
-            st.warning(f"⚠️ Rate limit hit for {date_str}. Retrying in {wait_time}s...")
-            time.sleep(wait_time)
-            
-        except Exception as e:
-            return f"❌ AI Error: {str(e)}"
-            
-    return "⏭️ Max retries reached for this date. API is busy."
-
-# --- DATA FETCHING ---
+# --- 3. ROBUST DATA FETCHING ---
 @st.cache_data(ttl=3600)
-def get_swing_data(ticker, threshold, years):
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=365 * years)
+def get_historical_df(ticker, years):
+    end = datetime.now()
+    start = end - timedelta(days=365 * years)
     
+    # Download data
+    df = yf.download(ticker, start=start, end=end, auto_adjust=True)
+    
+    if df.empty:
+        return df
+
+    # CRITICAL FIX: Flatten MultiIndex columns
+    # This turns ('NVDA', 'Close') into just 'Close'
+    if isinstance(df.columns, pd.MultiIndex):
+        # We take the level that contains OHLCV (usually level 0 or 1 depending on version)
+        if ticker in df.columns.levels[0]:
+            df.columns = df.columns.get_level_values(1)
+        else:
+            df.columns = df.columns.get_level_values(0)
+    
+    return df
+
+def get_safe_ticker_data(ticker_str):
+    t = yf.Ticker(ticker_str)
+    info_data = {}
+    earnings_data = None
     try:
-        data = yf.download(ticker, start=start_date, end=end_date)
-        if data.empty: return None, []
-        
-        # Calculate daily change
-        data['Change'] = data['Close'].pct_change() * 100
-        swings = data[abs(data['Change']) >= threshold].sort_index(ascending=False)
-        
-        results = []
-        for date, row in swings.iterrows():
-            results.append({
-                'date': date,
-                'close': float(row['Close'].iloc[0] if isinstance(row['Close'], pd.Series) else row['Close']),
-                'pct': float(row['Change'].iloc[0] if isinstance(row['Change'], pd.Series) else row['Change'])
-            })
-        return data, results
-    except Exception as e:
-        st.error(f"YFinance Error: {e}")
-        return None, []
+        raw_info = t.info
+        if isinstance(raw_info, dict): info_data = raw_info
+    except: 
+        info_data = {"longName": ticker_str}
+    try:
+        earnings_data = t.get_earnings_dates(limit=16)
+        if earnings_data is not None: 
+            earnings_data.index = earnings_data.index.tz_localize(None)
+    except: 
+        pass
+    return info_data, earnings_data
 
-# --- MAIN UI ---
-st.title("🤖 Gemini AI Stock Analyst")
-st.write("Detecting major price swings and researching the 'Why' using Google Search Grounding.")
+# --- 4. AI RESEARCH ---
+def gemini_research(ticker, date_obj, pct):
+    date_s = date_obj.strftime('%Y-%m-%d')
+    prompt = f"Research {ticker} news for {date_s}. Price moved {pct:.2f}%. Explain why."
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash", contents=prompt,
+            config=types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
+        )
+        return response.text
+    except: return "AI Research currently unavailable."
 
+# --- 5. SIDEBAR & LOGIC ---
 with st.sidebar:
-    st.header("Search Parameters")
-    ticker_input = st.text_input("Ticker Symbol", "TSLA").upper()
-    swing_limit = st.slider("Volatility Trigger (%)", 1.0, 15.0, 5.0)
-    lookback = st.number_input("Years to Analyze", 1, 5, 1)
-    st.info("💡 Free Gemini API keys have a limit of ~15 requests per minute. Analysis may pause to wait for quota reset.")
+    st.title("⚙️ Controls")
+    ticker_sym = st.text_input("Ticker Symbol", value="NVDA").upper()
+    years_val = st.slider("History (Years)", 1, 5, 2)
+    vol_trigger = st.slider("Volatility Trigger (%)", 1.0, 15.0, 4.0)
+    deep_dive = st.button("🔍 Run AI Deep Dive", type="primary", use_container_width=True)
 
-if st.button("Deep Dive into Volatility", type="primary", use_container_width=True):
-    full_df, swing_list = get_swing_data(ticker_input, swing_limit, lookback)
-    
-    if swing_list:
-        # Limit to top 8 moves to avoid completely exhausting daily quota
-        analysis_queue = swing_list[:8] 
-        st.success(f"Found {len(swing_list)} moves. Analyzing the top {len(analysis_queue)}.")
+if ticker_sym:
+    df = get_historical_df(ticker_sym, years_val)
+    info, earnings_df = get_safe_ticker_data(ticker_sym)
+
+    if not df.empty:
+        # Detect Volatility - Now works because 'Close' is a simple column
+        df['Change'] = df['Close'].pct_change() * 100
+        vol_events = df[abs(df['Change']) >= vol_trigger].copy()
+
+        # Header Metrics
+        st.subheader(f"{info.get('longName', ticker_sym)}")
+        m1, m2, m3 = st.columns(3)
         
-        # Initialize Progress Bar
-        progress_text = "AI Researcher is looking up news..."
-        my_bar = st.progress(0, text=progress_text)
+        # Ensure values are simple floats for formatting
+        latest_price = float(df['Close'].iloc[-1])
+        market_cap = info.get('marketCap', 0)
         
-        for i, s in enumerate(analysis_queue):
-            # Update Progress
-            percent_complete = (i + 1) / len(analysis_queue)
-            my_bar.progress(percent_complete, text=f"Analyzing move from {s['date'].strftime('%Y-%m-%d')}...")
+        m1.markdown(f"<div class='info-box'><p class='metric-label'>Price</p><p class='metric-value'>${latest_price:.2f}</p></div>", unsafe_allow_html=True)
+        m2.markdown(f"<div class='info-box'><p class='metric-label'>Market Cap</p><p class='metric-value'>${market_cap/1e12:.2f}T</p></div>", unsafe_allow_html=True)
+        m3.markdown(f"<div class='info-box'><p class='metric-label'>Volatility Events</p><p class='metric-value'>{len(vol_events)} ⚡</p></div>", unsafe_allow_html=True)
 
-            # Display UI for this swing
-            move_class = "move-pos" if s['pct'] > 0 else "move-neg"
-            st.markdown(f"### 📅 {s['date'].strftime('%B %d, %Y')}")
-            
-            col1, col2 = st.columns([1, 2])
-            
-            with col1:
-                st.metric("Closing Price", f"${s['close']:.2f}", f"{s['pct']:+.2f}%")
-                
-                # Context Chart
-                c_start = s['date'] - timedelta(days=10)
-                c_end = s['date'] + timedelta(days=10)
-                chart_df = full_df.loc[c_start:c_end]
-                
-                fig = go.Figure(data=[go.Candlestick(
-                    x=chart_df.index, open=chart_df['Open'], high=chart_df['High'],
-                    low=chart_df['Low'], close=chart_df['Close']
-                )])
-                fig.add_vline(x=s['date'], line_dash="dash", line_color="orange")
-                fig.update_layout(height=280, margin=dict(l=0,r=0,b=0,t=0), template="plotly_white", xaxis_rangeslider_visible=False)
-                st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
+        # --- 6. CHARTING ---
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.7, 0.3])
+        
+        # Main Candlestick
+        fig.add_trace(go.Candlestick(
+            x=df.index, open=df['Open'], high=df['High'], 
+            low=df['Low'], close=df['Close'], name="Price"
+        ), row=1, col=1)
 
-            with col2:
-                # Call Gemini with grounding
-                ai_analysis = analyze_move_with_retry(ticker_input, s['date'], s['pct'])
-                st.markdown(f"<div class='report-card'><b>AI Insight:</b><br>{ai_analysis}</div>", unsafe_allow_html=True)
-                
-            st.markdown("---")
-            
-            # Small buffer to avoid hitting TPM (Tokens Per Minute) limit immediately
-            time.sleep(2) 
+        # ⚡ Volatility Markers
+        if not vol_events.empty:
+            fig.add_trace(go.Scatter(
+                x=vol_events.index, y=vol_events['High'] * 1.05, 
+                mode='markers+text', text='⚡', name='Volatility', 
+                hovertext=[f"Move: {p:.2f}%" for p in vol_events['Change']]
+            ), row=1, col=1)
 
-        my_bar.empty()
-        st.balloons()
+        # Q Earnings Markers
+        if earnings_df is not None:
+            mask = (earnings_df.index >= df.index.min()) & (earnings_df.index <= df.index.max())
+            e_dates = earnings_df[mask].index.intersection(df.index)
+            if not e_dates.empty:
+                fig.add_trace(go.Scatter(
+                    x=e_dates, y=df.loc[e_dates]['Low'] * 0.95, 
+                    mode='markers+text', text='Q', name='Earnings', 
+                    marker=dict(size=12, color='#00D9FF', symbol='square')
+                ), row=1, col=1)
+
+        fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color='#48484a', opacity=0.4), row=2, col=1)
+        fig.update_layout(template="plotly_dark", height=600, showlegend=False, xaxis_rangeslider_visible=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # --- 7. AI DEEP DIVE ---
+        if deep_dive:
+            st.header("🤖 AI Event Analysis")
+            top_swings = vol_events.sort_values(by='Change', key=abs, ascending=False).head(5)
+            for date, row in top_swings.iterrows():
+                with st.spinner(f"Analyzing {date.date()}..."):
+                    insight = gemini_research(ticker_sym, date, row['Change'])
+                    st.markdown(f"<div class='report-card'><h4>📅 {date.strftime('%Y-%m-%d')} | {row['Change']:+.2f}%</h4><p>{insight}</p></div>", unsafe_allow_html=True)
+            st.balloons()
     else:
-        st.warning("No moves found for that ticker/threshold.")
+        st.error(f"No data found for {ticker_sym}. Please check the ticker symbol.")
